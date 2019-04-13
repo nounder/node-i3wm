@@ -1,0 +1,16 @@
+{
+  "name": "i3wm",
+  "version": "0.1.0",
+  "description": "Node interface for i3 window manager",
+  "main": "i3wm.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "i3",
+    "i3wm",
+    "ipc"
+  ],
+  "author": "Ralph Gutkowski",
+  "license": "ISC"
+}
