@@ -4,15 +4,23 @@ const net = require('net')
 
 const MAGIC = 'i3-ipc'
 
+/**
+ * Message/reply format
+ *     "i3-ipc" <message length> <message type> <payload>
+ *
+ * Length and types are u32.
+ */
+
 // Byes
 const B_M = MAGIC.length
-const B_N = 8 // long
+const B_N = 4 // long
 
 // Offsets
 const O_M = 0
 const O_L = B_M // length
 const O_T = B_M + B_N  // message type
 const O_P = B_M + B_N + B_N // message payload
+
 
 const MSG_TYPES = {
 	RUN_COMMAND: 0,
@@ -65,21 +73,21 @@ const encodePayload = (data) => {
 
 const encodeMsg = (type, payload) => {
   const payloadData = encodePayload(payload)
-  const length = Buffer.byteLength(payloadData, 'ascii')
+  const length = Buffer.byteLength(payloadData, 'ascii');
 
 	const b = Buffer.alloc(
 		B_M +
 		B_N + // length
     B_N + // type
-		payloadData.length
+    length
 	);
 
 	b.write(MAGIC, O_M, 'ascii')
-	b.writeUInt32LE(payloadData.length, O_L)
+	b.writeUInt32LE(length, O_L)
 	b.writeUInt32LE(type, O_T)
 	b.write(payloadData, O_P, 'ascii')
 
-  console.log('------buffer', b.toString('hex'))
+  console.log(b.toString('hex'))
 
 	return b
 }
@@ -95,21 +103,22 @@ const encodeCommand = (cmd, ...args) => {
 }
 
 /**
- * Reads unsigned 32-bit integer used in protocol.
+ * Reads u32 used in protocol.
  *
- * Integers are not converted.
- * Its format are platform-specific.
+ * Integers are not converted by i3 so endiance must be checked.
  */
+const BUFFER_READ_INT_FN = os.endianness() === 'LE'
+      ? 'readUInt32LE'
+      : 'readUInt32BE';
+
 const readInt = (buffer, offset = 0) => {
-  return os.endianness() === 'LE'
-    ? buffer.readUInt32LE(offset)
-    : buffer.readUInt32BE(offset);
+  return buffer[BUFFER_READ_INT_FN](offset);
 };
 
 const decodeMessage = (data) => {
-  const type = readInt(data, B_M + 1)
+  const type = readInt(data, O_T)
   const length = readInt(data, O_L)
-  const payload = data.slice(O_P - 8).toString()
+  const payload = data.slice(O_P, O_P + length).toString()
 
   return {
     type,
@@ -124,15 +133,14 @@ const debug = async () => {
 
 	client.on('connect', () => {
 		client.write(encodeCommand('mark m'))
-		//client.write(encodeMsg(MSG_TYPES.GET_WORKSPACES, ['workspace']))
 	})
 
 
 	client.on('data', (data) => {
-    console.group('Response')
+    console.group('Replay')
 		console.log('data', data.toString());
 		console.log(decodeMessage(data))
-    console.groupEnd('Response')
+    console.groupEnd('Replay')
 	})
 };
 
