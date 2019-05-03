@@ -208,6 +208,10 @@ class Client extends EventEmitter {
     return this.message(MESSAGES.SUBSCRIBE, events)
   }
 
+  sync() {
+    return this.message(MESSAGES.SYNC)
+  }
+
   _onMessage() {
     this.on('_message', (message) => {
       const { type, isEvent } = message[Meta]
