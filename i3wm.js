@@ -3,7 +3,10 @@ const childProc = require('child_process')
 const net = require('net')
 const EventEmitter = require('events')
 
-const MAGIC = 'i3-ipc'
+
+/*******************************
+ * PROTOCOL
+ *******************************/
 
 /**
  * Message/reply format
@@ -11,6 +14,8 @@ const MAGIC = 'i3-ipc'
  *
  * Length and types are u32.
  */
+
+const MAGIC = 'i3-ipc'
 
 // Byes
 const B_M = MAGIC.length
@@ -23,18 +28,18 @@ const O_T = B_M + B_N  // message type
 const O_P = B_M + B_N + B_N // message payload
 
 const MESSAGES = {
-	RUN_COMMAND: 0,
-	GET_WORKSPACES: 1,
-	SUBSCRIBE: 2,
-	GET_OUTPUTS: 3,
-	GET_TREE: 4,
-	GET_MARKS: 5,
-	GET_BAR_CONFIG: 6,
-	GET_VERSION: 7,
-	GET_BINDING_MODES: 8,
-	GET_CONFIG: 9,
-	SEND_TICK: 10,
-	SYNC: 11,
+  RUN_COMMAND: 0,
+  GET_WORKSPACES: 1,
+  SUBSCRIBE: 2,
+  GET_OUTPUTS: 3,
+  GET_TREE: 4,
+  GET_MARKS: 5,
+  GET_BAR_CONFIG: 6,
+  GET_VERSION: 7,
+  GET_BINDING_MODES: 8,
+  GET_CONFIG: 9,
+  SEND_TICK: 10,
+  SYNC: 11,
 }
 
 const EVENTS = [
@@ -48,7 +53,7 @@ const EVENTS = [
   'tick',
 ].reduce((a, v) => {
   return { ...a, [v]: v }
-});
+})
 
 const EVENT_TYPES = {
   0: 'workspace',
@@ -77,51 +82,51 @@ const REPLIES = {
 
 const MESSAGES_REPLIES = Object.values(REPLIES).reduce((a, v) => {
   return { ...a, [v]: v, }
-}, {});
+}, {})
 
 const Meta = Symbol('i3wm Meta')
 
 const getSocketPath = async (bin = 'i3') => {
-	return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const cmd = [bin, '--get-socketpath']
 
-		childProc.exec(cmd.join(' '), (err, stdout) => {
-			if (err) {
-				return reject(err);
-			}
+    childProc.exec(cmd.join(' '), (err, stdout) => {
+      if (err) {
+        return reject(err)
+      }
 
-			resolve(stdout.toString().trim())
-		})
-	})
+      resolve(stdout.toString().trim())
+    })
+  })
 }
 
 const encodePayload = (data) => {
   return typeof data === 'object'
-		? JSON.stringify(data)
-		: String(data)
+    ? JSON.stringify(data)
+    : String(data)
 }
 
 const encodeMsg = (type, payload) => {
   const payloadData = encodePayload(payload)
   const length = Buffer.byteLength(payloadData, 'ascii')
 
-	const b = Buffer.alloc(
-		B_M +
-		B_N + // length
+  const b = Buffer.alloc(
+    B_M +
+    B_N + // length
     B_N + // type
     length
-	);
+  )
 
-	b.write(MAGIC, O_M, 'ascii')
-	b.writeUInt32LE(length, O_L)
-	b.writeUInt32LE(type, O_T)
-	b.write(payloadData, O_P, 'ascii')
+  b.write(MAGIC, O_M, 'ascii')
+  b.writeUInt32LE(length, O_L)
+  b.writeUInt32LE(type, O_T)
+  b.write(payloadData, O_P, 'ascii')
 
-	return b
+  return b
 }
 
 const encodeCommand = (cmd, ...args) => {
-	const _args = args.map(encodePayload)
+  const _args = args.map(encodePayload)
 
   const payload = _args.length > 0
         ? [cmd, ..._args].join(' ')
@@ -136,10 +141,10 @@ const encodeCommand = (cmd, ...args) => {
  * Integers are not converted by i3 so endiance must be checked.
  */
 const readInt = (() => {
-  const BUFFER_READ_INT_FN = 'readUInt32' + os.endianness();
+  const BUFFER_READ_INT_FN = 'readUInt32' + os.endianness()
 
   return (buffer, offset = 0) => {
-    return buffer[BUFFER_READ_INT_FN](offset);
+    return buffer[BUFFER_READ_INT_FN](offset)
   }
 })()
 
@@ -149,7 +154,7 @@ const decodeMessage = (data) => {
   const isEvent = rawType >>> 31 === 1 // highest-bit = 1 -> event
   const type = isEvent
         ? rawType ^ (1 << 31) // toggle highest-bit
-        : rawType;
+        : rawType
   const payload = data.slice(O_P, O_P + length).toString()
   const decoded = JSON.parse(payload)
 
@@ -160,6 +165,10 @@ const decodeMessage = (data) => {
 
   return decoded
 }
+
+/*******************************
+ * CLIENT
+ *******************************/
 
 class Client extends EventEmitter {
   static async connect({
@@ -179,7 +188,7 @@ class Client extends EventEmitter {
       conn.write(data)
     })
 
-    return client;
+    return client
   }
 
   constructor() {
@@ -240,18 +249,18 @@ class Client extends EventEmitter {
       // added by this block.
       const _i3wm_handler = (message) => {
         if (message[Meta].isEvent) {
-          return;
+          return
         }
 
-        resolve(message);
+        resolve(message)
 
         this.off('_message', _i3wm_handler)
 
-        clearTimeout(timer);
+        clearTimeout(timer)
       }
 
       this.on('_message', _i3wm_handler)
-    });
+    })
   }
 }
 
