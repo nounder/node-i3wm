@@ -1,6 +1,7 @@
 const os = require('os')
 const childProc = require('child_process')
 const net = require('net')
+const EventEmitter = require('events')
 
 const MAGIC = 'i3-ipc'
 
@@ -21,8 +22,7 @@ const O_L = B_M // length
 const O_T = B_M + B_N  // message type
 const O_P = B_M + B_N + B_N // message payload
 
-
-const MSG_TYPES = {
+const MESSAGES = {
 	RUN_COMMAND: 0,
 	GET_WORKSPACES: 1,
 	SUBSCRIBE: 2,
@@ -37,7 +37,31 @@ const MSG_TYPES = {
 	SYNC: 11,
 }
 
-const REPLY_TYPE = {
+const EVENTS = [
+  'workspace',
+  'output',
+  'mode',
+  'window',
+  'barconfig_update',
+  'binding',
+  'shutdown',
+  'tick',
+].reduce((a, v) => {
+  return { ...a, [v]: v }
+});
+
+const EVENT_TYPES = {
+  0: 'workspace',
+  1: 'output',
+  2: 'mode',
+  3: 'window',
+  4: 'barconfig_update',
+  5: 'binding',
+  6: 'shutdown',
+  7: 'tick',
+}
+
+const REPLIES = {
   COMMAND: 0,
   WORKSPACES: 1,
   SUBSCRIBE: 2,
@@ -51,18 +75,24 @@ const REPLY_TYPE = {
   TICK: 10,
 }
 
-const i3 = {
-	getSocketPath: async () => {
-		return new Promise((resolve, reject) => {
-			childProc.exec('i3 --get-socketpath', (err, stdout) => {
-				if (err) {
-					return reject(err);
-				}
+const MESSAGES_REPLIES = Object.values(REPLIES).reduce((a, v) => {
+  return { ...a, [v]: v, }
+}, {});
 
-				resolve(stdout.toString().trim())
-			});
-		});
-	}
+const Meta = Symbol('i3wm Meta')
+
+const getSocketPath = async (bin = 'i3') => {
+	return new Promise((resolve, reject) => {
+    const cmd = [bin, '--get-socketpath']
+
+		childProc.exec(cmd.join(' '), (err, stdout) => {
+			if (err) {
+				return reject(err);
+			}
+
+			resolve(stdout.toString().trim())
+		})
+	})
 }
 
 const encodePayload = (data) => {
@@ -73,7 +103,7 @@ const encodePayload = (data) => {
 
 const encodeMsg = (type, payload) => {
   const payloadData = encodePayload(payload)
-  const length = Buffer.byteLength(payloadData, 'ascii');
+  const length = Buffer.byteLength(payloadData, 'ascii')
 
 	const b = Buffer.alloc(
 		B_M +
@@ -87,8 +117,6 @@ const encodeMsg = (type, payload) => {
 	b.writeUInt32LE(type, O_T)
 	b.write(payloadData, O_P, 'ascii')
 
-  console.log(b.toString('hex'))
-
 	return b
 }
 
@@ -99,7 +127,7 @@ const encodeCommand = (cmd, ...args) => {
         ? [cmd, ..._args].join(' ')
         : cmd
 
-  return encodeMsg(MSG_TYPES.RUN_COMMAND, payload)
+  return encodeMsg(MESSAGES.RUN_COMMAND, payload)
 }
 
 /**
@@ -107,45 +135,127 @@ const encodeCommand = (cmd, ...args) => {
  *
  * Integers are not converted by i3 so endiance must be checked.
  */
-const BUFFER_READ_INT_FN = os.endianness() === 'LE'
-      ? 'readUInt32LE'
-      : 'readUInt32BE';
+const readInt = (() => {
+  const BUFFER_READ_INT_FN = 'readUInt32' + os.endianness();
 
-const readInt = (buffer, offset = 0) => {
-  return buffer[BUFFER_READ_INT_FN](offset);
-};
+  return (buffer, offset = 0) => {
+    return buffer[BUFFER_READ_INT_FN](offset);
+  }
+})()
 
 const decodeMessage = (data) => {
-  const type = readInt(data, O_T)
   const length = readInt(data, O_L)
+  const rawType = readInt(data, O_T)
+  const isEvent = rawType >>> 31 === 1 // highest-bit = 1 -> event
+  const type = isEvent
+        ? rawType ^ (1 << 31) // toggle highest-bit
+        : rawType;
   const payload = data.slice(O_P, O_P + length).toString()
+  const decoded = JSON.parse(payload)
 
-  return {
+  decoded[Meta] = {
+    isEvent,
     type,
-    length,
-    payload,
+  }
+
+  return decoded
+}
+
+class Client extends EventEmitter {
+  static async connect({
+    bin = 'i3'
+  } = {}) {
+    const sock = await getSocketPath(bin)
+    const conn = net.createConnection(sock)
+    const client = new Client
+
+    conn.on('data', (data) => {
+      const msg = decodeMessage(data)
+
+      client.emit('_message', msg)
+    })
+
+    client.on('_write', (data) => {
+      conn.write(data)
+    })
+
+    return client;
+  }
+
+  constructor() {
+    super()
+
+    this.on('_message', this._onMessage)
+  }
+
+  message(type, payload) {
+    const data = encodeMsg(type, payload)
+
+    this._write(data)
+
+    return this._promiseImmidiateReplay()
+  }
+
+  command(command, ...payload) {
+    const data = encodeCommand(command, ...payload)
+
+    this._write(data)
+
+    return this._promiseImmidiateReplay()
+  }
+
+  subscribe(...events) {
+    return this.message(MESSAGES.SUBSCRIBE, events)
+  }
+
+  _onMessage() {
+    this.on('_message', (message) => {
+      const { type, isEvent } = message[Meta]
+
+      if (isEvent) {
+        const eventName = EVENT_TYPES[type]
+
+        this.emit(eventName, message)
+      } else {
+        this.emit('_reply', message)
+      }
+    })
+  }
+
+  _write(data) {
+    this.emit('_write', data)
+  }
+
+  _promiseImmidiateReplay() {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('Replay timeout'))
+      }, 2000)
+
+      // Crypting name to make it easy to identify handlers
+      // added by this block.
+      const _i3wm_handler = (message) => {
+        if (message[Meta].isEvent) {
+          return;
+        }
+
+        resolve(message);
+
+        this.off('_message', _i3wm_handler)
+
+        clearTimeout(timer);
+      }
+
+      this.on('_message', _i3wm_handler)
+    });
   }
 }
 
-const debug = async () => {
-	const sockFile = await i3.getSocketPath()
-	const client = net.createConnection(sockFile)
-
-	client.on('connect', () => {
-		client.write(encodeCommand('mark m'))
-	})
-
-
-	client.on('data', (data) => {
-    console.group('Replay')
-		console.log('data', data.toString());
-		console.log(decodeMessage(data))
-    console.groupEnd('Replay')
-	})
-};
-
 module.exports = {
-  i3,
+  getSocketPath,
   encodeMsg,
-  debug,
+  Client,
+  MESSAGES,
+  EVENTS,
+  REPLIES,
 }
