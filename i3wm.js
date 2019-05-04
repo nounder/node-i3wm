@@ -187,6 +187,16 @@ class Client extends EventEmitter {
   }
 
   message(type, payload) {
+    if (typeof type === 'string') {
+      const foundType = MESSAGES[type.toUpperCase()]
+
+      if (!foundType) {
+        throw new Error(`Message type '${type}' is incorrect`)
+      }
+
+      type = foundType;
+    }
+
     const data = encodeMessage(type, payload)
 
     this._write(data)
@@ -254,9 +264,15 @@ class Client extends EventEmitter {
 }
 
 module.exports = {
-  getSocketPath,
-  encodeMessage,
   Client,
+
   MESSAGES,
   REPLIES,
+  Meta,
+
+  getSocketPath,
+
+  encodePayload,
+  encodeMessage,
+  encodeCommand,
 }
