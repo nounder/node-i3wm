@@ -27,6 +27,7 @@ const O_L = B_M // length
 const O_T = B_M + B_N  // message type
 const O_P = B_M + B_N + B_N // message payload
 
+// See: https://i3wm.org/docs/ipc.html#_sending_messages_to_i3
 const MESSAGES = {
   RUN_COMMAND: 0,
   GET_WORKSPACES: 1,
@@ -42,20 +43,8 @@ const MESSAGES = {
   SYNC: 11,
 }
 
-const EVENTS = [
-  'workspace',
-  'output',
-  'mode',
-  'window',
-  'barconfig_update',
-  'binding',
-  'shutdown',
-  'tick',
-].reduce((a, v) => {
-  return { ...a, [v]: v }
-})
-
-const EVENT_TYPES = {
+// See: https://i3wm.org/docs/ipc.html#_available_events
+const EVENTS_MAP = {
   0: 'workspace',
   1: 'output',
   2: 'mode',
@@ -66,6 +55,7 @@ const EVENT_TYPES = {
   7: 'tick',
 }
 
+// See: https://i3wm.org/docs/ipc.html#_reply_format
 const REPLIES = {
   COMMAND: 0,
   WORKSPACES: 1,
@@ -80,10 +70,9 @@ const REPLIES = {
   TICK: 10,
 }
 
-const MESSAGES_REPLIES = Object.values(REPLIES).reduce((a, v) => {
-  return { ...a, [v]: v, }
-}, {})
-
+/**
+ * Used in message object, holding metadata.
+ */
 const Meta = Symbol('i3wm Meta')
 
 const getSocketPath = async (bin = 'i3') => {
@@ -106,7 +95,7 @@ const encodePayload = (data) => {
     : String(data)
 }
 
-const encodeMsg = (type, payload) => {
+const encodeMessage = (type, payload) => {
   const payloadData = encodePayload(payload)
   const length = Buffer.byteLength(payloadData, 'ascii')
 
@@ -132,7 +121,7 @@ const encodeCommand = (cmd, ...args) => {
         ? [cmd, ..._args].join(' ')
         : cmd
 
-  return encodeMsg(MESSAGES.RUN_COMMAND, payload)
+  return encodeMessage(MESSAGES.RUN_COMMAND, payload)
 }
 
 /**
@@ -198,7 +187,7 @@ class Client extends EventEmitter {
   }
 
   message(type, payload) {
-    const data = encodeMsg(type, payload)
+    const data = encodeMessage(type, payload)
 
     this._write(data)
 
@@ -226,7 +215,7 @@ class Client extends EventEmitter {
       const { type, isEvent } = message[Meta]
 
       if (isEvent) {
-        const eventName = EVENT_TYPES[type]
+        const eventName = EVENTS_MAP[type]
 
         this.emit(eventName, message)
       } else {
@@ -266,9 +255,8 @@ class Client extends EventEmitter {
 
 module.exports = {
   getSocketPath,
-  encodeMsg,
+  encodeMessage,
   Client,
   MESSAGES,
-  EVENTS,
   REPLIES,
 }
