@@ -4,6 +4,9 @@ This Node.js package allows to talk with i3 window manager using [IPC interface]
 
 No dependencies, no unecessary abstractions. Just simple, modern API.
 
+Source code is only [one file](i3wm.js) with clear comments and references to
+excellent [i3wm docs](1).
+
 ## Examples
 
 ### Connect to i3
@@ -47,4 +50,7 @@ await client.command('subscribe', ['window'])
 const tree = await client.message('get_tree')
 ```
 
+Possible messages can be found in [source code](i3wm.js) and `man i3-msg`.
+
 [0]: https://i3wm.org/docs/ipc.html
+[1]: https://i3wm.org/docs/
