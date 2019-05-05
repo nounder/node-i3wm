@@ -159,6 +159,9 @@ const decodeMessage = (data) => {
 /*******************************
  * CLIENT
  *******************************/
+class ReplyTimeoutError extends Error { }
+
+const REPLY_TIMEOUT = 200
 
 class Client extends EventEmitter {
   static async connect({
@@ -216,12 +219,14 @@ class Client extends EventEmitter {
   /**
    * Sends single command.
    */
-  command(command, ...payload) {
+  async command(command, ...payload) {
     const data = encodeCommand(command, ...payload)
 
     this._write(data)
 
-    return this._promiseImmidiateReplay()
+    const [r1] = await this._promiseImmidiateReplay()
+
+    return pipeSuccessReply(r1)
   }
 
   subscribe(...events) {
@@ -234,8 +239,8 @@ class Client extends EventEmitter {
       .then(pipeSuccessReply)
   }
 
-  tick() {
-    return this.message(MESSAGES.SEND_TICK)
+  tick(payload) {
+    return this.message(MESSAGES.SEND_TICK, payload)
       .then(pipeSuccessReply)
   }
 
@@ -256,16 +261,12 @@ class Client extends EventEmitter {
   _promiseImmidiateReplay() {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error('Replay timeout'))
-      }, 2000)
+        reject(new ReplyTimeoutError('Reply timeout'))
+      }, REPLY_TIMEOUT)
 
       // Crypting name to make it easy to identify handlers
       // added by this block.
       const _i3wm_handler = (message) => {
-        if (message[Meta].isEvent) {
-          return
-        }
-
         resolve(message)
 
         this.off('_reply', _i3wm_handler)
@@ -278,24 +279,20 @@ class Client extends EventEmitter {
   }
 }
 
-const pipeSuccessReply = (message) => {
-  const { type } = message[Meta]
-
-  switch (type) {
-  case REPLIES.COMMAND:
-  case REPLIES.SUBSCRIBE:
-  case REPLIES.TICK:
-  case REPLIES.SYNC:
-    if (!value.success) {
-      throw new Error('Unsuccessful replied')
-    }
+/**
+ * Some replies may fail. Throws if they do.
+ */
+const pipeSuccessReply = (reply) => {
+  if (!reply.success) {
+    throw new Error('Unsuccessful replied')
   }
 
-  return value
+  return reply
 }
 
 module.exports = {
   Client,
+  ReplyTimeoutError,
 
   MESSAGES,
   REPLIES,
