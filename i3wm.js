@@ -170,6 +170,7 @@ class Client extends EventEmitter {
     const sock = await getSocketPath(bin)
     const conn = net.createConnection(sock)
     const client = new Client
+    client._conn = conn;
 
     conn.on('data', (data) => {
       const msg = decodeMessage(data)
@@ -182,6 +183,10 @@ class Client extends EventEmitter {
     })
 
     return client
+  }
+
+  static disconnect(client) {
+    client._conn.destroy()
   }
 
   constructor() {
