@@ -1,10 +1,14 @@
 {
   "name": "i3wm",
-  "version": "0.1.0",
-  "description": "Node interface for i3 window manager",
+  "version": "1.0.0",
+  "description": "Talk with i3 window manager",
   "main": "i3wm.js",
   "scripts": {
     "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rgtk/node-i3wm.git"
   },
   "keywords": [
     "i3",
@@ -12,5 +16,6 @@
     "ipc"
   ],
   "author": "Ralph Gutkowski",
+  "homepage": "https://github.com/rgtk/node-i3wm",
   "license": "ISC"
 }

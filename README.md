@@ -7,6 +7,12 @@ No dependencies, no unecessary abstractions. Just simple, modern API.
 Source code is only [one file](i3wm.js) with clear comments and references to
 excellent [i3wm docs](1).
 
+## Install
+
+```
+npm install i3wm
+```
+
 ## Examples
 
 ### Connect to i3
@@ -23,7 +29,7 @@ i3wm.connect().then(client => {
 const client = await i3wm.connect()
 ```
 
-You can also pass `{ bin: 'sway' }` to `connect` to use custom binary.
+You can also use custom binary by passing additional options to `connect`. For example: `connect({ bin: 'sway' })`.
 
 ### Subscribe to events
 
