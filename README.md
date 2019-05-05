@@ -20,13 +20,13 @@ npm install i3wm
 ```js
 const i3wm = require('i3wm')
 
-i3wm.connect().then(client => {
+i3wm.Client.connect().then(client => {
   console.log('Conneceted')
 })
 
 // or
 
-const client = await i3wm.connect()
+const client = await i3wm.Client.connect()
 ```
 
 You can also use custom binary by passing additional options to `connect`. For example: `connect({ bin: 'sway' })`.
@@ -42,21 +42,39 @@ client.on('window', msg => {
   }
 })
 ```
+### Messages
 
-### Send commands or messagges
+```js
+// Subscribe, payload is serialized
+await client.message('subscribe', ['window'])
+
+// Get tree of all windows and workspaces
+const tree = await client.message('get_tree')
+
+// send multiple commands in one go
+const [r1, r2] = await client.message('run_command', 'workspace 0; mark m')
+```
+
+Possible messages can be found in [source code](i3wm.js) and `man i3-msg`.
+
+### Commands
+
+Use `command()` to send a command and get unwraped reply.
 
 ```js
 // Mark current window with 'm'
 await client.command('mark m')
 
-// Subscribe, payload is serialized
-await client.command('subscribe', ['window'])
-
-// Get tree of all windows and workspaces
-const tree = await client.message('get_tree')
+// command() throws on incorrect input
+client.command('BLAH')
+  .catch(err => console.log('Incorrect: ': err.input))
 ```
 
-Possible messages can be found in [source code](i3wm.js) and `man i3-msg`.
+### Disconnect
+
+```js
+i3wm.Client.disconnect(client)
+```
 
 [0]: https://i3wm.org/docs/ipc.html
 [1]: https://i3wm.org/docs/
