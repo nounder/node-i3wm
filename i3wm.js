@@ -68,6 +68,7 @@ const REPLIES = {
   BINDING_MODES: 8,
   GET_CONFIG: 9,
   TICK: 10,
+  SYNC: 11,
 }
 
 /**
@@ -183,7 +184,15 @@ class Client extends EventEmitter {
   constructor() {
     super()
 
-    this.on('_message', this._onMessage)
+    this.on('_message', (msg) => {
+      const { type, isEvent } = msg[Meta]
+
+      if (isEvent) {
+        this._handleEvent(msg, type)
+      } else {
+        this._handleReply(msg, type)
+      }
+    })
   }
 
   message(type, payload) {
@@ -204,6 +213,9 @@ class Client extends EventEmitter {
     return this._promiseImmidiateReplay()
   }
 
+  /**
+   * Sends single command.
+   */
   command(command, ...payload) {
     const data = encodeCommand(command, ...payload)
 
@@ -214,24 +226,27 @@ class Client extends EventEmitter {
 
   subscribe(...events) {
     return this.message(MESSAGES.SUBSCRIBE, events)
+      .then(pipeSuccessReply)
   }
 
   sync() {
     return this.message(MESSAGES.SYNC)
+      .then(pipeSuccessReply)
   }
 
-  _onMessage() {
-    this.on('_message', (message) => {
-      const { type, isEvent } = message[Meta]
+  tick() {
+    return this.message(MESSAGES.SEND_TICK)
+      .then(pipeSuccessReply)
+  }
 
-      if (isEvent) {
-        const eventName = EVENTS_MAP[type]
+  _handleReply(message) {
+    this.emit('_reply', message)
+  }
 
-        this.emit(eventName, message)
-      } else {
-        this.emit('_reply', message)
-      }
-    })
+  _handleEvent(message, type) {
+    const eventName = EVENTS_MAP[type]
+
+    this.emit(eventName, message)
   }
 
   _write(data) {
@@ -253,14 +268,30 @@ class Client extends EventEmitter {
 
         resolve(message)
 
-        this.off('_message', _i3wm_handler)
+        this.off('_reply', _i3wm_handler)
 
         clearTimeout(timer)
       }
 
-      this.on('_message', _i3wm_handler)
+      this.on('_reply', _i3wm_handler)
     })
   }
+}
+
+const pipeSuccessReply = (message) => {
+  const { type } = message[Meta]
+
+  switch (type) {
+  case REPLIES.COMMAND:
+  case REPLIES.SUBSCRIBE:
+  case REPLIES.TICK:
+  case REPLIES.SYNC:
+    if (!value.success) {
+      throw new Error('Unsuccessful replied')
+    }
+  }
+
+  return value
 }
 
 module.exports = {
