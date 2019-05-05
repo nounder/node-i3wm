@@ -202,7 +202,7 @@ class Client extends EventEmitter {
     if (typeof type === 'string') {
       const foundType = MESSAGES[type.toUpperCase()]
 
-      if (!foundType) {
+      if (foundType === undefined) {
         throw new Error(`Message type '${type}' is incorrect`)
       }
 
